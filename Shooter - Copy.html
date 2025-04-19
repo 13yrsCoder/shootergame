@@ -1,0 +1,2342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riddhiman Shooter - Multiplayer with Lobby Chat</title>
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+  <!-- Gun.js – using a public relay peer so no manual IP is needed -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #000; }
+    /* Main Menu Styles */
+    #mainMenu {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(25,118,210,0.8); /* Slightly darker blue */
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      z-index: 300; color: #fff;
+    }
+    #mainMenu h1 { font-size: 64px; margin-bottom: 40px; text-shadow: 2px 2px 10px rgba(0,0,0,0.7); }
+    #mainMenu button {
+      font-size: 24px; padding: 15px 30px;
+      background: #ff9800; border: none;
+      border-radius: 8px; cursor: pointer;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+      transition: background 0.3s ease, transform 0.3s ease;
+      margin: 10px;
+    }
+    #mainMenu button:hover { background: #fb8c00; transform: scale(1.05); }
+
+    /* Multiplayer Lobby UI Overlay */
+    #multiplayerUI {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85); /* Darker overlay */
+      display: none; flex-direction: column;
+      justify-content: flex-start; align-items: center;
+      z-index: 350; color: #fff;
+      padding: 20px;
+      overflow-y: auto; /* Allow scrolling if content overflows */
+    }
+    #multiplayerUI h2 { margin-bottom: 10px; }
+
+    /* Multiplayer Name Input */
+    #multiplayerNameSetup {
+      margin-bottom: 20px;
+    }
+    #multiplayerNameInput {
+      font-size: 20px;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    /* Lobby Setup */
+    #lobbySetup {
+      margin-bottom: 20px;
+    }
+    #lobbySetup input, #lobbySetup button {
+      font-size: 18px; padding: 10px; margin: 5px;
+      border-radius: 5px;
+      border: none;
+    }
+    #lobbySetup button {
+      background: #ff9800; cursor: pointer;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    #lobbySetup button:hover { background: #fb8c00; transform: scale(1.05); }
+
+    /* Lobby Info and Chat */
+    #lobbyInfo { margin: 10px 0; text-align: center; width: 90%; max-width: 500px; } /* Added width limit */
+    #lobbyMessage { white-space: pre-line; margin-bottom: 15px; } /* Preserve line breaks & add margin */
+    #lobbyChat {
+      width: 100%; /* Take full width of parent */
+      background: #222;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    #lobbyChatMessages {
+      height: 150px; /* Fixed height for chat messages */
+      overflow-y: auto; /* Scroll for overflow */
+      background: #333;
+      padding: 5px;
+      border-radius: 5px;
+      font-size: 14px;
+      margin-bottom: 5px;
+      text-align: left; /* Align text left */
+    }
+    #lobbyChat input {
+      width: calc(75% - 10px); /* Adjust width for button and margin */
+      margin-right: 5px;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #555;
+      box-sizing: border-box; /* Include padding in width */
+    }
+    #lobbyChat button {
+      width: calc(25% - 5px);
+      padding: 8px;
+      background: #ff9800; border: none;
+      border-radius: 4px; cursor: pointer;
+      transition: background 0.3s ease;
+       box-sizing: border-box; /* Include padding in width */
+    }
+    #lobbyChat button:hover { background: #fb8c00; }
+
+     /* Start Game button alignment */
+    #startGameBtn { margin-top: 10px; /* Add space above */ }
+
+    /* Back Button */
+    #backButton {
+      font-size: 18px; padding: 10px 20px;
+      background: #ff9800; border: none;
+      border-radius: 8px; cursor: pointer;
+      margin-top: 20px; /* More space */
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    #backButton:hover { background: #fb8c00; transform: scale(1.05); }
+
+    /* Pause Menu Styles */
+    #pauseMenu {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); /* Darker pause overlay */
+      display: none; flex-direction: column;
+      justify-content: center; align-items: center;
+      z-index: 400; color: #fff;
+    }
+    #pauseMenu h1 { font-size: 48px; margin-bottom: 20px; }
+    #pauseMenu button {
+      font-size: 20px; padding: 10px 20px;
+      background: #ff9800; border: none;
+      border-radius: 8px; cursor: pointer; margin: 5px;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    #pauseMenu button:hover { background: #fb8c00; transform: scale(1.05); }
+
+    /* Win/Game Over Message */
+    #endGameMessage { /* Renamed from winMessage for flexibility */
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8); /* Darker end game overlay */
+      color: white;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 500;
+    }
+    #endGameMessage div { text-align: center; }
+    #endGameMessage h1 { font-size: 48px; margin-bottom: 20px; }
+    #endGameMessage button {
+      font-size: 20px; padding: 10px 20px;
+      background: #ff9800; border: none;
+      border-radius: 8px; cursor: pointer; margin: 5px;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    #endGameMessage button:hover { background: #fb8c00; transform: scale(1.05); }
+
+    /* Game canvas & HUD */
+    #gameCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; } /* Ensure canvas is behind UI */
+    #instructions {
+      position: absolute; top: 20px; left: 20px;
+      background-color: rgba(0,0,0,0.6); /* Slightly darker */
+      color: white;
+      padding: 10px; border-radius: 5px; z-index: 100;
+      display: block; /* Show by default */
+      font-size: 14px; /* Smaller font */
+    }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      width: 20px; height: 20px;
+      transform: translate(-50%, -50%);
+      color: white; font-size: 20px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8); /* Add shadow */
+      text-align: center; pointer-events: none;
+      user-select: none; z-index: 100;
+    }
+    #lockMessage {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0,0,0,0.7); color: white;
+      padding: 20px; border-radius: 5px;
+      font-size: 24px; z-index: 200; display: none;
+      text-align: center; /* Center text */
+    }
+    #hud {
+      position: absolute; bottom: 20px; right: 20px;
+      background-color: rgba(0,0,0,0.6); /* Slightly darker */
+      color: white;
+      padding: 10px; border-radius: 5px; z-index: 100;
+      min-width: 220px; /* Ensure enough width */
+    }
+    #ammo, #enemyCount, #gunModeDisplay, #scoreDisplay {
+      font-size: 18px; font-weight: bold;
+      margin-bottom: 3px; /* Spacing */
+    }
+    #healthBarContainer {
+      width: 200px; height: 20px;
+      background: #333; border: 1px solid #ccc;
+      position: relative; margin: 5px 0;
+    }
+    #healthBar { width: 100%; height: 100%; background: #4CAF50; transition: width 0.3s ease; /* Smooth transition */ }
+    #enemyCount { color: #f44336; } /* Keep red for single player */
+
+    /* Scoreboard styling */
+    #scorecardContainer {
+      margin-top: 10px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px;
+      border-radius: 5px;
+    }
+    #scorecardContainer h3 {
+      margin: 0 0 5px 0; /* Add bottom margin */
+      font-size: 16px;
+      color: #fff;
+      border-bottom: 1px solid #555; /* Separator */
+      padding-bottom: 3px;
+    }
+    #scorecard {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+      color: #fff;
+      font-size: 14px; /* Smaller font for scores */
+    }
+     #scorecard li {
+       margin-bottom: 2px;
+     }
+
+    /* Reload indicator styling */
+    #reloadIndicator {
+      position: absolute; bottom: 80px; right: 20px;
+      background: rgba(0,0,0,0.7); color: yellow;
+      padding: 5px 10px; border-radius: 5px;
+      z-index: 150; display: none; font-size: 16px;
+    }
+
+    /* Ammo prompt styling */
+    #ammoPrompt {
+      position: absolute; bottom: 120px; left: 50%;
+      transform: translateX(-50%);
+      color: white; font-size: 20px;
+      background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; /* Added background */
+      display: none; z-index: 300;
+    }
+
+    /* Hit Effect */
+    #hitEffect {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: red; opacity: 0;
+      pointer-events: none; z-index: 200;
+      transition: opacity 0.5s ease; /* Smooth fade out */
+    }
+  </style>
+</head>
+<body>
+  <!-- Main Menu Screen -->
+  <div id="mainMenu">
+    <h1>Riddhiman Shooter</h1>
+    <button onclick="startSinglePlayer()">Single Player</button>
+    <button onclick="showMultiplayerMenu()">Multiplayer</button>
+  </div>
+
+  <!-- Multiplayer Lobby UI Overlay -->
+  <div id="multiplayerUI">
+    <h2>Multiplayer Lobby</h2>
+    <div id="multiplayerNameSetup">
+      <label>
+        Enter your name:
+        <input type="text" id="multiplayerNameInput" placeholder="Your name" />
+      </label>
+    </div>
+    <div id="lobbySetup">
+      <div>
+        <button onclick="createLobby()">Create Lobby</button>
+      </div>
+      <div>
+        <input type="text" id="lobbyCodeInput" placeholder="Lobby Code (Join)" />
+        <button onclick="joinLobby()">Join Lobby</button>
+      </div>
+    </div>
+    <!-- Lobby Info section - shown after create/join -->
+    <div id="lobbyInfo" style="display:none;">
+      <p id="lobbyMessage">Lobby Code: ABCDEF\nPlayers:\n(Waiting...)</p> <!-- Placeholder text -->
+      <div id="lobbyChat">
+        <h3>Lobby Chat</h3>
+        <div id="lobbyChatMessages"></div>
+        <input type="text" id="lobbyChatInput" placeholder="Type a message" onkeydown="if(event.key==='Enter') sendLobbyChat();"/>
+        <button onclick="sendLobbyChat()">Send</button>
+      </div>
+      <!-- Start button is inside lobbyInfo now -->
+      <button id="startGameBtn" onclick="startMultiplayerGame()" style="display:none;">Start Game</button>
+      <button onclick="leaveLobby()">Leave Lobby</button>
+    </div>
+    <button id="backButton" onclick="backToMainMenu()">Back</button>
+  </div>
+
+  <!-- Pause Menu -->
+  <div id="pauseMenu">
+    <h1>Paused</h1>
+    <button onclick="resumeGame()">Resume Game</button>
+    <button onclick="restartGame()">Restart Game</button> <!-- Restart might need context (SP/MP) -->
+    <button onclick="goToMainMenu()">Main Menu</button>
+  </div>
+
+  <!-- Win/Game Over Message -->
+  <div id="endGameMessage">
+    <div>
+      <h1 id="endGameTitle">You Win!</h1>
+      <p id="endGameDetails"></p> <!-- Optional details -->
+      <button onclick="restartGame()">Play Again</button>
+      <button onclick="goToMainMenu()">Main Menu</button>
+    </div>
+  </div>
+
+  <div id="instructions">
+    <h2>Instructions</h2>
+    <p>Movement: WASD</p>
+    <p>Jump: SPACE</p>
+    <p>Run: SHIFT</p>
+    <p>Shoot: LEFT MOUSE</p>
+    <p>Reload: R</p>
+    <p>Toggle Gun Mode: T</p>
+    <p>Pick Up Ammo: E (near blue box)</p>
+    <p>Toggle Mouse Lock: CAPS LOCK</p>
+    <p>Pause/Resume: TAB</p>
+    <p>Toggle Instructions: I</p>
+  </div>
+  <div id="crosshair">+</div>
+  <div id="lockMessage">Click to play<br>Press CAPS LOCK to toggle mouse control</div>
+  <div id="hud">
+    <div id="ammo">Ammo: 30/90</div>
+    <div id="healthBarContainer">
+      <div id="healthBar"></div>
+    </div>
+    <div id="enemyCount">Enemies: 0</div>
+    <div id="gunModeDisplay">Mode: Semi</div>
+    <div id="scoreDisplay">Score: 0</div>
+    <!-- Scoreboard for Multiplayer -->
+    <div id="scorecardContainer" style="display: none;"> <!-- Hide by default -->
+      <h3>Scoreboard</h3>
+      <ul id="scorecard"></ul>
+    </div>
+  </div>
+
+  <div id="reloadIndicator">Reloading...</div>
+  <div id="ammoPrompt">Press E to pick up ammo</div>
+  <div id="hitEffect"></div>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    // ===============================
+    // --- GAME CONSTANTS & CONFIG ---
+    // ===============================
+    const PLAYER_HEIGHT = 1.8;
+    const PLAYER_RADIUS = 0.4;
+    const JUMP_FORCE = 10;
+    const MOUSE_SENSITIVITY = 0.002;
+    const MAX_AMMO_CLIP = 30;
+    const MAX_TOTAL_AMMO = 90;
+    const FIRE_RATE_SEMI = 100; // ms
+    const FIRE_RATE_AUTO = 120; // ms
+    const RELOAD_DURATION = 1.5; // seconds
+    const GRAVITY = 20;
+    const WALK_SPEED = 8;
+    const RUN_SPEED = 14;
+    const MAX_STEP_HEIGHT = 0.5;
+    const AMMO_PICKUP_DISTANCE = 3;
+    const WIN_CONDITION_KILLS_SP = 20;
+    const WIN_CONDITION_SCORE_MP = 20;
+    const ENEMY_SPAWN_RATE_SP = 5; // seconds
+    const MAX_ENEMIES_SP = 10;
+    const NETWORK_UPDATE_INTERVAL = 100; // ms
+
+    // ===============================
+    // --- GLOBAL VARIABLES ---
+    // ===============================
+    let scene, camera, renderer, playerObject, playerGun, ammoBox;
+    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+    let canJump = true, isJumping = false, isRunning = false;
+    let velocity = new THREE.Vector3();
+    let walls = []; // Stores wall mesh, type ('wall', 'ground'), and bounding box
+    let mouseLocked = false;
+    let lastTime = 0, lastNetworkUpdateTime = 0;
+    let paused = false;
+    let isShooting = false;
+    let currentModeIsSinglePlayer = true;
+
+    // Player State
+    let playerHealth = 100;
+    let playerScore = 0;
+    let currentAmmo = MAX_AMMO_CLIP;
+    let totalAmmo = MAX_TOTAL_AMMO;
+    let reloading = false;
+    let lastShotTime = 0;
+    let gunMode = "semi";
+    let reloadTimeout = null;
+    let reloadStartTime = 0; // Added for animation timing
+
+    // Projectiles
+    let bullets = [];
+    let enemyBullets = [];
+
+    // Single Player State
+    let enemies = [];
+    let enemiesKilledSP = 0;
+    let enemySpawnTimerSP = 0;
+
+    // Multiplayer State
+    let multiplayerMode = false;
+    let gun = null;
+    let currentLobby = null;
+    let lobbyCode = null;
+    let isHost = false;
+    let myPlayerId = "";
+    let myPlayerName = "Player";
+    let playersList = {}; // Local cache: { id: { name, x, y, z, ry, crx, health, score, left, counted } }
+    let remotePlayers = {}; // Three.js objects: { id: THREE.Group }
+
+    // Cached Vectors & Objects
+    const _vector = new THREE.Vector3();
+    const _camWorldPos = new THREE.Vector3();
+    const _camWorldQuat = new THREE.Quaternion();
+    const _moveVector = new THREE.Vector3();
+    const _intendedPos = new THREE.Vector3();
+    const _collisionCheckPos = new THREE.Vector3();
+    const _playerBox = new THREE.Box3(); // Added for spawn checking
+    const _spawnCheckSize = new THREE.Vector3(PLAYER_RADIUS * 2, PLAYER_HEIGHT, PLAYER_RADIUS * 2); // Size for spawn box
+
+    // Sounds
+    const shotSound = new Audio('https://actions.google.com/sounds/v1/weapons/laser_shoot.ogg');
+    const reloadSound = new Audio('https://actions.google.com/sounds/v1/impacts/metal_thud.ogg');
+    const enemyShotSound = new Audio('https://actions.google.com/sounds/v1/weapons/laser_shoot.ogg');
+    const deathSound = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_beep.ogg');
+    const hitSound = new Audio('https://actions.google.com/sounds/v1/impacts/sharp_impact.ogg');
+
+
+    // ===============================
+    // --- INITIALIZATION & SETUP ---
+    // ===============================
+
+    function setupCommonScene() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        sunLight.position.set(10, 15, 10);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 50;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
+        scene.add(sunLight);
+
+        // Camera and Player Object
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        playerObject = new THREE.Object3D();
+        playerObject.add(camera);
+        camera.position.y = PLAYER_HEIGHT * 0.9;
+        scene.add(playerObject);
+
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Common Elements
+        createGround();
+        createWalls(); // Creates geometry
+        playerGun = createWeaponModel();
+        camera.add(playerGun);
+
+        // Cache wall bounding boxes (IMPORTANT: do this AFTER createWalls)
+        walls = [];
+        scene.traverse(child => {
+            if (child.isMesh && child.userData.isWall) {
+                walls.push({ mesh: child, type: 'wall', box: new THREE.Box3().setFromObject(child) });
+            } else if (child.isMesh && child.userData.isGround) {
+                 walls.push({ mesh: child, type: 'ground', box: new THREE.Box3().setFromObject(child) });
+            }
+        });
+        console.log(`Cached ${walls.length} collidable objects.`); // Debug log
+    }
+
+    function startSinglePlayer() {
+        console.log("Starting Single Player");
+        document.getElementById('mainMenu').style.display = 'none';
+        document.getElementById('multiplayerUI').style.display = 'none'; // Ensure MP UI is hidden
+        document.getElementById('scorecardContainer').style.display = 'none';
+        document.getElementById('enemyCount').style.display = 'block';
+        currentModeIsSinglePlayer = true;
+        multiplayerMode = false;
+        resetGameState();
+        setupCommonScene();
+        // Safer starting position for SP
+        playerObject.position.set(-10, PLAYER_HEIGHT, 10); // Example clear spot
+        velocity.set(0,0,0); // Reset velocity
+        spawnAmmoBox();
+        for(let i=0; i < 3; i++) spawnEnemySP();
+        initEventListeners();
+        updateHUD();
+        showLockMessage();
+        lastTime = performance.now();
+        animate();
+    }
+
+    function showMultiplayerMenu() { // Renamed from startMultiplayer
+        console.log("Showing Multiplayer Menu");
+        document.getElementById('mainMenu').style.display = 'none';
+        document.getElementById('multiplayerUI').style.display = 'flex';
+        document.getElementById('lobbySetup').style.display = 'block'; // Show create/join
+        document.getElementById('lobbyInfo').style.display = 'none'; // Hide lobby details initially
+        document.getElementById('backButton').style.display = 'block'; // Ensure back button is visible
+        currentModeIsSinglePlayer = false; // Set mode flag
+
+        // Initialize Gun.js if not already done
+        if (!gun) {
+            gun = Gun({ peers: ['https://gun-manhattan.herokuapp.com/gun'] });
+            myPlayerId = Gun.SEA.random(16);
+            console.log("My Player ID:", myPlayerId);
+        }
+        resetGameState(); // Reset scores, health etc. before showing lobby
+    }
+
+
+    function finalizeMultiplayerStart() {
+        console.log("Finalizing Multiplayer Start");
+        document.getElementById('multiplayerUI').style.display = 'none';
+        multiplayerMode = true; // Set game state flag
+        currentModeIsSinglePlayer = false;
+
+        // If scene doesn't exist (first MP game), set it up
+        if (!scene) {
+            setupCommonScene();
+            initEventListeners();
+        } else {
+            clearSinglePlayerElements();
+        }
+
+        // UI setup for MP game
+        document.getElementById('scorecardContainer').style.display = 'block';
+        document.getElementById('enemyCount').style.display = 'none';
+
+        const spawnPoint = getValidSpawnPoint();
+        playerObject.position.copy(spawnPoint);
+        velocity.set(0,0,0);
+
+        if (ammoBox) scene.remove(ammoBox);
+        spawnAmmoBoxMultiplayer();
+
+        // Reset player state for the match
+        playerHealth = 100;
+        playerScore = 0;
+        currentAmmo = MAX_AMMO_CLIP;
+        totalAmmo = MAX_TOTAL_AMMO;
+        updateHUD();
+
+        // Ensure remote player models are added IF THEY EXIST and aren't already added
+        for (let key in remotePlayers) {
+            if (remotePlayers[key] && !scene.getObjectById(remotePlayers[key].id)) { // Check if not in scene
+                scene.add(remotePlayers[key]);
+                console.log("Re-adding remote player to scene:", key);
+            }
+        }
+
+        showLockMessage();
+        if (lastTime === 0) { // Start animation loop if not already running
+           lastTime = performance.now();
+           animate();
+        } else { // If animation loop already running (e.g. from SP), just reset time
+            lastTime = performance.now();
+        }
+        paused = false; // Ensure game is not paused
+        alert("Multiplayer game starting!");
+    }
+
+     function resetGameState() {
+        // Reset common player state
+        playerHealth = 100;
+        playerScore = 0;
+        currentAmmo = MAX_AMMO_CLIP;
+        totalAmmo = MAX_TOTAL_AMMO;
+        reloading = false;
+        gunMode = "semi";
+        paused = false;
+        isShooting = false;
+        velocity.set(0,0,0);
+
+        // Reset SP state
+        enemies.forEach(enemy => { if (enemy.mesh) scene?.remove(enemy.mesh); }); // Use optional chaining
+        enemies = [];
+        enemyBullets.forEach(bullet => { if (bullet.mesh) scene?.remove(bullet.mesh); });
+        enemyBullets = [];
+        enemiesKilledSP = 0;
+        enemySpawnTimerSP = 0;
+
+        // Reset MP state (more is reset in leaveLobby)
+        // Don't clear playersList/remotePlayers here, leaveLobby handles it
+        // Clear projectiles
+        bullets.forEach(b => { if(b.mesh) scene?.remove(b.mesh); });
+        bullets = [];
+
+        // Reset UI elements
+        document.getElementById('pauseMenu').style.display = 'none';
+        document.getElementById('endGameMessage').style.display = 'none';
+        if(document.getElementById('scorecard')) document.getElementById('scorecard').innerHTML = '';
+        updateHUD();
+    }
+
+    function clearSinglePlayerElements() {
+       // Remove existing enemies if switching from SP
+        enemies.forEach(enemy => { if (enemy.mesh) scene?.remove(enemy.mesh); });
+        enemies = [];
+        // Remove enemy bullets
+        enemyBullets.forEach(bullet => { if (bullet.mesh) scene?.remove(bullet.mesh); });
+        enemyBullets = [];
+        // Remove SP ammo box if present
+        if (ammoBox && !ammoBox.userData.isMultiplayerBox) {
+             scene.remove(ammoBox);
+             ammoBox = null;
+        }
+    }
+
+    let listenersInitialized = false;
+    function initEventListeners() {
+        if (listenersInitialized) return;
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        document.addEventListener('mousemove', onMouseMove, false);
+        document.addEventListener('mousedown', onMouseDown, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+        window.addEventListener('resize', onWindowResize, false);
+        document.addEventListener('click', onClick, false);
+        document.addEventListener('pointerlockchange', onPointerLockChange, false);
+        document.addEventListener('pointerlockerror', () => console.error("Pointer Lock Error"), false);
+        listenersInitialized = true;
+        console.log("Event listeners initialized.");
+    }
+
+    // ===============================
+    // --- UI & MENU FUNCTIONS ---
+    // ===============================
+
+    // showMultiplayerMenu is now used to enter the MP section
+
+    function backToMainMenu() {
+        console.log("Returning to main menu...");
+        leaveLobby(); // Clean up lobby state if in MP UI
+        document.getElementById('multiplayerUI').style.display = 'none';
+        document.getElementById('mainMenu').style.display = 'flex';
+        // Consider stopping animation loop or full reload if needed
+        // location.reload(); // Simplest way to fully reset state
+    }
+
+    function togglePause() {
+        if (multiplayerMode) return; // No pausing in multiplayer
+        paused = !paused;
+        if (paused) {
+            document.getElementById('pauseMenu').style.display = 'flex';
+            if (document.pointerLockElement) { document.exitPointerLock(); }
+        } else {
+            document.getElementById('pauseMenu').style.display = 'none';
+            // Only request lock if game is active (scene exists)
+            if (!mouseLocked && scene) {
+                document.body.requestPointerLock();
+            }
+        }
+    }
+
+    function resumeGame() {
+        if (multiplayerMode) return;
+        paused = false;
+        document.getElementById('pauseMenu').style.display = 'none';
+        if (!mouseLocked && scene) {
+             document.body.requestPointerLock();
+        }
+    }
+
+    function restartGame() {
+       location.reload();
+    }
+
+    function goToMainMenu() {
+        location.reload();
+    }
+
+    function showEndGameScreen(title, details = "") {
+        paused = true;
+        if (document.pointerLockElement) { document.exitPointerLock(); }
+        document.getElementById('endGameTitle').innerText = title;
+        document.getElementById('endGameDetails').innerText = details;
+        document.getElementById('endGameMessage').style.display = 'flex';
+    }
+
+    function updateHUD() {
+        document.getElementById('ammo').innerText = `Ammo: ${currentAmmo}/${totalAmmo}`;
+        document.getElementById('healthBar').style.width = Math.max(0, playerHealth) + '%';
+        document.getElementById('gunModeDisplay').innerText = `Mode: ${gunMode === "auto" ? "Auto" : "Semi"}`;
+        document.getElementById('scoreDisplay').innerText = `Score: ${playerScore}`;
+
+        if (currentModeIsSinglePlayer) {
+             document.getElementById('enemyCount').innerText = `Enemies: ${enemies.length}`;
+        }
+
+        document.getElementById('reloadIndicator').style.display = reloading ? 'block' : 'none';
+
+        // Scorecard updated separately by refreshLobbyUI or its callers in MP
+    }
+
+    function updateScorecard() {
+        // This function now only *renders* the scorecard based on playersList
+        if (!multiplayerMode || !playersList) return;
+
+        const sortedPlayers = Object.values(playersList)
+            .filter(p => p && !p.left)
+            .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        let scoreListHtml = "";
+        sortedPlayers.forEach(player => {
+            const name = player.name || "Player";
+            const score = player.score || 0;
+            if (player.id === myPlayerId) {
+                scoreListHtml += `<li><strong>${name}: ${score}</strong></li>`;
+            } else {
+                scoreListHtml += `<li>${name}: ${score}</li>`;
+            }
+        });
+
+        const scorecardElement = document.getElementById('scorecard');
+        if (scorecardElement) { // Check if element exists
+            scorecardElement.innerHTML = scoreListHtml;
+        } else {
+            console.warn("Scorecard element not found during update.");
+        }
+    }
+
+
+    function showLockMessage() {
+         document.getElementById('lockMessage').style.display = 'block';
+    }
+    function hideLockMessage() {
+         document.getElementById('lockMessage').style.display = 'none';
+    }
+
+    function toggleInstructions() {
+         const instructions = document.getElementById('instructions');
+         instructions.style.display = instructions.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function showHitEffect() {
+        const hitEffect = document.getElementById('hitEffect');
+        hitEffect.style.opacity = 0.5;
+        setTimeout(() => { hitEffect.style.opacity = 0; }, 100);
+        hitSound.play();
+    }
+
+    // ===============================
+    // --- EVENT HANDLERS ---
+    // ===============================
+
+    function onKeyDown(event) {
+        if (document.activeElement === document.getElementById('lobbyChatInput') ||
+            document.activeElement === document.getElementById('multiplayerNameInput') ||
+            document.activeElement === document.getElementById('lobbyCodeInput')) {
+             if (event.key === 'Enter' && document.activeElement === document.getElementById('lobbyChatInput')) {
+                 sendLobbyChat();
+             }
+             return; // Don't process game keys if typing in inputs
+        }
+
+        if (event.code === "Tab" && !multiplayerMode) {
+            event.preventDefault();
+            togglePause();
+            return;
+        }
+
+        if (paused && event.code !== "CapsLock") return;
+
+        switch (event.code) {
+            case "KeyW": moveForward = true; break;
+            case "KeyS": moveBackward = true; break;
+            case "KeyA": moveLeft = true; break;
+            case "KeyD": moveRight = true; break;
+            case "Space":
+                if (canJump && !isJumping) {
+                    velocity.y = JUMP_FORCE;
+                    canJump = false;
+                    isJumping = true;
+                }
+                break;
+            case "ShiftLeft":
+            case "ShiftRight": isRunning = true; break;
+            case "KeyR": if (!reloading && currentAmmo < MAX_AMMO_CLIP && totalAmmo > 0) reload(); break; // Add checks
+            case "KeyT":
+                gunMode = (gunMode === "semi") ? "auto" : "semi";
+                updateHUD();
+                break;
+            case "KeyE": tryPickupAmmo(); break;
+            case "KeyI": toggleInstructions(); break;
+            case "CapsLock":
+                event.preventDefault();
+                togglePointerLock();
+                break;
+        }
+    }
+
+    function onKeyUp(event) {
+         // Ignore if typing in inputs
+         if (document.activeElement === document.getElementById('lobbyChatInput') ||
+            document.activeElement === document.getElementById('multiplayerNameInput') ||
+            document.activeElement === document.getElementById('lobbyCodeInput')) {
+             return;
+        }
+
+        switch (event.code) {
+            case "KeyW": moveForward = false; break;
+            case "KeyS": moveBackward = false; break;
+            case "KeyA": moveLeft = false; break;
+            case "KeyD": moveRight = false; break;
+            case "ShiftLeft":
+            case "ShiftRight": isRunning = false; break;
+        }
+    }
+
+    function onMouseMove(event) {
+        if (!mouseLocked || paused) return;
+        const movementX = event.movementX || 0;
+        const movementY = event.movementY || 0;
+
+        playerObject.rotation.y -= movementX * MOUSE_SENSITIVITY;
+        camera.rotation.x -= movementY * MOUSE_SENSITIVITY;
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+    }
+
+    function onMouseDown(event) {
+        if (!mouseLocked || paused) return;
+        if (event.button === 0) { // Left mouse button
+            isShooting = true;
+            if (gunMode === "semi") {
+                fireBullet();
+            }
+        }
+    }
+
+    function onMouseUp(event) {
+        if (event.button === 0) { // Left mouse button
+            isShooting = false;
+        }
+    }
+
+    function onWindowResize() {
+        if (!camera || !renderer) return;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onClick() {
+        // Request lock only if game is running (scene exists) and not locked/paused
+        if (!mouseLocked && !paused && scene) {
+             document.body.requestPointerLock();
+        }
+    }
+
+    function onPointerLockChange() {
+        mouseLocked = !!document.pointerLockElement;
+        if (mouseLocked) {
+            hideLockMessage();
+        } else {
+            // Show lock message ONLY if the game is running (scene exists) and not paused
+            if (!paused && scene) {
+                 showLockMessage();
+            } else {
+                 hideLockMessage(); // Hide if paused or in menus
+            }
+        }
+        console.log("Pointer Lock:", mouseLocked);
+    }
+
+    function togglePointerLock() {
+        if (!scene) return; // Don't try to lock if game not started
+        if (mouseLocked) {
+            document.exitPointerLock();
+        } else {
+            document.body.requestPointerLock();
+        }
+    }
+
+    // ===============================
+    // --- CORE GAME MECHANICS ---
+    // ===============================
+
+     function fireBullet() {
+        if (reloading || !mouseLocked || paused) return;
+
+        const now = performance.now();
+        const currentFireRate = (gunMode === "auto") ? FIRE_RATE_AUTO : FIRE_RATE_SEMI;
+
+        if (now - lastShotTime < currentFireRate) return;
+
+        if (currentAmmo <= 0) {
+            // Play empty sound maybe?
+            // Don't auto-reload immediately, let player press R
+            // reload();
+            return;
+        }
+
+        lastShotTime = now;
+        currentAmmo--;
+        updateHUD();
+
+        const bulletGeometry = new THREE.SphereGeometry(0.08, 6, 6);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+        camera.getWorldPosition(_camWorldPos);
+        camera.getWorldQuaternion(_camWorldQuat);
+        _vector.set(0, 0, -1).applyQuaternion(_camWorldQuat);
+
+        bullet.position.copy(_camWorldPos).addScaledVector(_vector, 0.5);
+        scene.add(bullet);
+
+        bullets.push({
+            mesh: bullet,
+            direction: _vector.clone(),
+            speed: 80,
+            lifeTime: 2,
+            age: 0,
+            ownerId: myPlayerId
+        });
+
+        shotSound.currentTime = 0; // Reset sound for rapid firing
+        shotSound.play();
+        flashMuzzle();
+    }
+
+    function flashMuzzle() {
+        const flash = new THREE.PointLight(0xffff00, 5, 2);
+        flash.position.set(0.2, -0.1, -0.6);
+        camera.add(flash);
+        setTimeout(() => {
+            camera.remove(flash);
+        }, 60);
+    }
+
+    function reload() {
+        if (reloading || currentAmmo === MAX_AMMO_CLIP || totalAmmo <= 0) return;
+
+        reloading = true;
+        reloadStartTime = performance.now();
+        updateHUD();
+        reloadSound.play();
+
+        if (reloadTimeout) clearTimeout(reloadTimeout);
+
+        reloadTimeout = setTimeout(() => {
+            const ammoNeeded = MAX_AMMO_CLIP - currentAmmo;
+            const ammoToLoad = Math.min(ammoNeeded, totalAmmo);
+
+            currentAmmo += ammoToLoad;
+            totalAmmo -= ammoToLoad;
+
+            reloading = false;
+            reloadTimeout = null;
+            reloadStartTime = 0;
+            if (playerGun) playerGun.rotation.x = 0;
+            updateHUD();
+        }, RELOAD_DURATION * 1000);
+    }
+
+    function tryPickupAmmo() {
+        if (ammoBox && !reloading) {
+            const distance = playerObject.position.distanceTo(ammoBox.position);
+            if (distance < AMMO_PICKUP_DISTANCE) {
+                currentAmmo = MAX_AMMO_CLIP;
+                totalAmmo = MAX_TOTAL_AMMO;
+                updateHUD();
+                document.getElementById('ammoPrompt').style.display = 'none';
+
+                scene.remove(ammoBox);
+                ammoBox = null;
+
+                setTimeout(() => {
+                    if (multiplayerMode) {
+                        spawnAmmoBoxMultiplayer();
+                    } else {
+                        spawnAmmoBox();
+                    }
+                }, 3000);
+            }
+        }
+    }
+
+    function playerDied() {
+        deathSound.play();
+        playerHealth = 0;
+        updateHUD();
+
+        if (multiplayerMode) {
+            console.log("Player died in MP, scheduling respawn...");
+            // Disable shooting while dead
+            isShooting = false;
+            // Maybe show a temporary "YOU DIED" overlay?
+            setTimeout(respawnPlayerMultiplayer, 4000);
+        } else {
+            console.log("Player died in SP, showing game over screen.");
+            showEndGameScreen("Game Over");
+        }
+    }
+
+    function respawnPlayerMultiplayer() {
+        if (!multiplayerMode || !currentLobby) return;
+
+        console.log("Respawning player...");
+        playerHealth = 100;
+        currentAmmo = MAX_AMMO_CLIP;
+        totalAmmo = MAX_TOTAL_AMMO;
+
+        const newSpawnPoint = getValidSpawnPoint();
+        playerObject.position.copy(newSpawnPoint);
+        velocity.set(0, 0, 0);
+
+        // Update network state immediately after respawn
+        const updateData = {
+            x: newSpawnPoint.x,
+            y: newSpawnPoint.y, // Use the actual spawn Y
+            z: newSpawnPoint.z,
+            ry: playerObject.rotation.y,
+            crx: camera.rotation.x,
+            health: playerHealth, // Send full health
+            // score: playerScore, // Score persists
+            left: false,
+            counted: false, // Reset counted flag on respawn
+            lastShooter: null // Clear last shooter on respawn
+        };
+         currentLobby.get('players').get(myPlayerId).put(updateData);
+
+        updateHUD();
+        console.log("Player respawned at", newSpawnPoint);
+    }
+
+    function takeDamage(amount, shooterId = null) {
+        if (playerHealth <= 0) return; // Already dead
+
+        playerHealth -= amount;
+        showHitEffect();
+
+        if (playerHealth <= 0) {
+            playerHealth = 0; // Clamp to 0
+            // Record shooter info ONLY if in multiplayer and health just dropped below zero
+            if (multiplayerMode && currentLobby && shooterId) {
+                 console.log(`Killed by ${shooterId}, updating network...`);
+                 currentLobby.get('players').get(myPlayerId).put({ health: 0, lastShooter: shooterId });
+            }
+            playerDied(); // Handle death logic (respawn timer or game over)
+        } else if (multiplayerMode && currentLobby) {
+            // Update own health on network if still alive (can be throttled)
+            // Only send if health changed significantly? For now send always.
+            currentLobby.get('players').get(myPlayerId).put({ health: playerHealth });
+        }
+
+        updateHUD();
+    }
+
+
+    // ===============================
+    // --- OBJECT CREATION ---
+    // ===============================
+
+    function createGround() {
+       const grassTexture = textureRepeat(new THREE.Color(0x4CAF50), 10);
+       const groundMaterial = new THREE.MeshLambertMaterial({ map: grassTexture, side: THREE.DoubleSide });
+       const groundGeometry = new THREE.PlaneGeometry(100, 100);
+       const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+       ground.rotation.x = -Math.PI / 2;
+       ground.position.y = 0;
+       ground.receiveShadow = true;
+       ground.userData.isGround = true; // Mark for collision system (but walls array filters type)
+       scene.add(ground);
+    }
+
+    function createWalls() {
+      const brickTexture = textureRepeat(new THREE.Color(0x8B4513), 2);
+      const wallMaterial = new THREE.MeshLambertMaterial({ map: brickTexture });
+
+      const addWall = (w, h, d, x, y, z) => {
+          const geometry = new THREE.BoxGeometry(w, h, d);
+          const wall = new THREE.Mesh(geometry, wallMaterial);
+          wall.position.set(x, y, z);
+          wall.castShadow = true;
+          wall.receiveShadow = true;
+          wall.userData.isWall = true; // Mark for collision system
+          scene.add(wall);
+          // NOTE: Bounding box caching happens in setupCommonScene AFTER all walls are added
+      };
+
+      const wallData = [ /* ... (same wall data as before) ... */
+            // Boundary walls
+            [1, 5, 100, -50, 2.5, 0],   // Left
+            [1, 5, 100, 50, 2.5, 0],    // Right
+            [100, 5, 1, 0, 2.5, -50],   // Back
+            [100, 5, 1, 0, 2.5, 50],    // Front
+            // Internal structures
+            [12, 4, 0.5, -10, 2, -5],
+            [10, 4, 0.5, 10, 2, 5],
+            [0.5, 2, 8, 0, 1, 10],      // Wall near (0,y,10) - check SP spawn
+            [6, 1, 6, -8, 0.5, 15],     // Lower wall/platform
+            [10, 1, 8, 15, 0.5, -10],   // Lower wall/platform
+            [20, 5, 1, 0, 2.5, -20],
+            [10, 5, 1, -30, 2.5, 20],
+            [10, 5, 1, 30, 2.5, -20],
+            [15, 5, 1, 20, 2.5, 20],
+            [15, 5, 1, -20, 2.5, -20],
+            [25, 5, 1, 0, 2.5, 30],
+      ];
+      wallData.forEach(data => addWall(...data));
+
+      // Special structures
+      for(let i=0;i<5;i++){ addWall(1, 1 + i * 0.6, 1, -15 + i * 2, (1 + i * 0.6) / 2, -15 + i * 2); } // Stairs
+      for(let i=-40;i<=40;i+=10){ addWall(1, 5, 20, i, 2.5, -15); addWall(1, 5, 20, i, 2.5, 15); } // Pillars
+      for(let j=-10;j<=10;j+=10){ addWall(20, 5, 1, -40, 2.5, j); addWall(20, 5, 1, 40, 2.5, j); } // Cross walls
+       console.log("Walls geometry created.");
+    }
+
+    function textureRepeat(color, repeat = 5) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        const context = canvas.getContext('2d');
+        context.fillStyle = `rgb(${Math.floor(color.r*255)}, ${Math.floor(color.g*255)}, ${Math.floor(color.b*255)})`;
+        context.fillRect(0, 0, 128, 128);
+        for (let i = 0; i < 200; i++) {
+            const x = Math.random() * 128; const y = Math.random() * 128;
+            const size = Math.random() * 2 + 1; const alpha = Math.random() * 0.2;
+            context.fillStyle = `rgba(0,0,0,${alpha})`; context.fillRect(x, y, size, size);
+        }
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(repeat, repeat);
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        texture.needsUpdate = true;
+        return texture;
+    }
+
+     function createWeaponModel() {
+        const gunGroup = new THREE.Group();
+        const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 30 });
+        const handleMaterial = new THREE.MeshPhongMaterial({ color: 0x222222, shininess: 10 });
+        const bodyGeo = new THREE.BoxGeometry(0.1, 0.12, 0.5);
+        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMaterial);
+        bodyMesh.position.set(0, 0, -0.25);
+        gunGroup.add(bodyMesh);
+        const handleGeo = new THREE.BoxGeometry(0.08, 0.25, 0.1);
+        const handleMesh = new THREE.Mesh(handleGeo, handleMaterial);
+        handleMesh.position.set(0, -0.15, -0.15);
+        handleMesh.rotation.x = Math.PI / 12;
+        gunGroup.add(handleMesh);
+        const barrelGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.2, 8);
+        const barrelMesh = new THREE.Mesh(barrelGeo, bodyMaterial);
+        barrelMesh.rotation.x = Math.PI / 2;
+        barrelMesh.position.set(0, 0.02, -0.6);
+        gunGroup.add(barrelMesh);
+        gunGroup.position.set(0.25, -0.25, -0.8);
+        gunGroup.scale.set(0.8, 0.8, 0.8);
+        return gunGroup;
+    }
+
+    function spawnAmmoBox() {
+        if (ammoBox) scene?.remove(ammoBox); // Use optional chaining
+
+        const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        const material = new THREE.MeshLambertMaterial({ color: 0x0077ff, emissive: 0x0033cc });
+        ammoBox = new THREE.Mesh(geometry, material);
+        ammoBox.userData.isMultiplayerBox = false;
+
+        let validPosition = false;
+        let attempts = 0;
+        const spawnArea = 45;
+
+        while (!validPosition && attempts < 30) {
+            attempts++;
+            const x = (Math.random() - 0.5) * spawnArea * 2;
+            const z = (Math.random() - 0.5) * spawnArea * 2;
+            const potentialPos = new THREE.Vector3(x, 0.4, z); // Center height for check
+
+            if (playerObject && playerObject.position.distanceTo(potentialPos) < 10) continue;
+
+            // Use box intersection check for spawning
+            const tempBox = new THREE.Box3().setFromCenterAndSize(potentialPos, new THREE.Vector3(0.8, 0.8, 0.8));
+            let collision = false;
+            for (const wall of walls) {
+                if (wall.type === 'wall' && tempBox.intersectsBox(wall.box)) {
+                    collision = true; break;
+                }
+            }
+            if (!collision) {
+                ammoBox.position.copy(potentialPos);
+                scene.add(ammoBox);
+                validPosition = true;
+                console.log("SP Ammo box spawned at:", potentialPos);
+            }
+        }
+        if (!validPosition) {
+             console.warn("Could not find valid position for SP ammo box.");
+             ammoBox = null;
+        }
+    }
+
+    function spawnAmmoBoxMultiplayer() {
+        if (ammoBox) scene?.remove(ammoBox);
+
+        const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        const material = new THREE.MeshLambertMaterial({ color: 0x0077ff, emissive: 0x0033cc });
+        ammoBox = new THREE.Mesh(geometry, material);
+        ammoBox.position.set(0, 0.4, 15); // Fixed position
+        ammoBox.userData.isMultiplayerBox = true;
+        scene.add(ammoBox);
+        console.log("MP Ammo box spawned at fixed position:", ammoBox.position);
+    }
+
+
+    // ===============================
+    // --- COLLISION & MOVEMENT ---
+    // ===============================
+
+    function checkCollision(pos, checkStep = false) {
+        // Checks if the player sphere *at the given feet position 'pos'* collides with walls
+        _collisionCheckPos.set(pos.x, pos.y - PLAYER_HEIGHT / 2 + PLAYER_RADIUS, pos.z); // Center of sphere
+        const playerSphere = new THREE.Sphere(_collisionCheckPos, PLAYER_RADIUS);
+
+        for (const wallData of walls) {
+            if (wallData.type === 'wall' && playerSphere.intersectsBox(wallData.box)) { // Only check 'wall' type
+                 if (checkStep) {
+                     const highestPoint = Math.min(playerSphere.center.y + playerSphere.radius, wallData.box.max.y);
+                     const stepClearanceY = pos.y - PLAYER_HEIGHT + MAX_STEP_HEIGHT;
+                     if (highestPoint < stepClearanceY) {
+                         continue; // Passable for stepping
+                     }
+                 }
+                 return true; // Collision detected
+            }
+        }
+        return false; // No collision
+    }
+
+    function updatePlayerMovement(delta) {
+        const speed = isRunning ? RUN_SPEED : WALK_SPEED;
+        let moveX = 0, moveZ = 0;
+
+        if (moveForward) moveZ -= 1; if (moveBackward) moveZ += 1;
+        if (moveLeft) moveX -= 1; if (moveRight) moveX += 1;
+
+        _moveVector.set(moveX, 0, moveZ).normalize().multiplyScalar(speed * delta);
+        _moveVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerObject.rotation.y);
+
+        let currentPos = playerObject.position;
+        _intendedPos.copy(currentPos).add(_moveVector); // Full intended move
+
+        // --- Horizontal Collision with Sliding ---
+        let allowedMove = _moveVector.clone();
+        let collisionX = false, collisionZ = false;
+
+        // Check X movement
+        if (_moveVector.x !== 0) {
+            if (checkCollision(currentPos.clone().add(new THREE.Vector3(_moveVector.x, 0, 0)))) {
+                allowedMove.x = 0;
+                collisionX = true;
+            }
+        }
+        // Check Z movement (based on potentially adjusted X position)
+        if (_moveVector.z !== 0) {
+             if (checkCollision(currentPos.clone().add(new THREE.Vector3(allowedMove.x, 0, _moveVector.z)))) {
+                 allowedMove.z = 0;
+                 collisionZ = true;
+            }
+        }
+
+        // Apply allowed horizontal movement
+        currentPos.add(new THREE.Vector3(allowedMove.x, 0, allowedMove.z));
+
+        // --- Stepping ---
+        let didStep = false;
+        if ((collisionX || collisionZ) && _moveVector.lengthSq() > 0) { // If a collision occurred during intended move
+            // Try stepping only if the original intended horizontal move was blocked
+            let stepCheckPos = currentPos.clone(); // Current pos after sliding
+            stepCheckPos.y += MAX_STEP_HEIGHT; // Check higher position
+
+            // Check collision slightly *forward* from the slid position at the step height
+            // This helps get *onto* the step. Use a fraction of the original intended move.
+            let stepForwardCheckPos = stepCheckPos.clone().addScaledVector(_moveVector.normalize(), PLAYER_RADIUS * 0.5);
+
+            // Pass 'true' to checkCollision for step check leniency
+            if (!checkCollision(stepForwardCheckPos, true)) {
+                 // Check if space directly above feet is clear (prevents clipping through low ceilings)
+                 if (!checkCollision(stepCheckPos, false)) { // Use strict check here
+                      // Perform the step
+                      playerObject.position.y += MAX_STEP_HEIGHT;
+                      velocity.y = Math.max(0, velocity.y); // Reset downward velocity
+                      canJump = true; // Allow jumping after step
+                      isJumping = false;
+                      didStep = true;
+                      console.log("Stepped up");
+                 } else {
+                     // console.log("Step blocked by ceiling");
+                 }
+            } else {
+                 // console.log("Step blocked forward");
+            }
+        }
+
+
+        // --- Gravity and Vertical Movement ---
+        if (!didStep) { // Only apply gravity if we didn't just step up
+             velocity.y -= GRAVITY * delta;
+             playerObject.position.y += velocity.y * delta;
+        }
+
+        // Ground collision and landing
+        if (playerObject.position.y < PLAYER_HEIGHT) {
+            // Check if we landed on a valid ground surface (optional, prevents falling through map)
+            // Raycast down slightly? For now, just reset.
+            velocity.y = 0;
+            playerObject.position.y = PLAYER_HEIGHT;
+            canJump = true;
+            isJumping = false;
+        }
+    }
+
+
+    // ===============================
+    // --- PROJECTILE UPDATES ---
+    // ===============================
+
+    function updateBullets(delta) {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            bullet.age += delta;
+
+            if (bullet.age > bullet.lifeTime) {
+                scene?.remove(bullet.mesh);
+                bullets.splice(i, 1);
+                continue;
+            }
+
+            _vector.copy(bullet.direction).multiplyScalar(bullet.speed * delta);
+            bullet.mesh.position.add(_vector);
+
+            const bulletSphere = new THREE.Sphere(bullet.mesh.position, 0.1);
+            let hit = false;
+
+            // 1. Check Wall Collisions
+            for (const wallData of walls) {
+                if (wallData.type === 'wall' && bulletSphere.intersectsBox(wallData.box)) {
+                    scene?.remove(bullet.mesh);
+                    bullets.splice(i, 1);
+                    hit = true;
+                    break;
+                }
+            }
+            if (hit) continue;
+
+            // 2. Check Player/Enemy Collisions
+            if (multiplayerMode) {
+                // MP: Check against remote players
+                for (let key in remotePlayers) {
+                    if (key !== myPlayerId && remotePlayers[key] && remotePlayers[key].box && !playersList[key]?.left) { // Check if player exists, not self, has box, and not left
+                        if (bulletSphere.intersectsBox(remotePlayers[key].box)) {
+                            // console.log(`Local bullet hit remote player: ${key}`); // DEBUG
+                            if (currentLobby) {
+                                const hitData = {
+                                    target: key,
+                                    damage: 25,
+                                    shooter: myPlayerId,
+                                    timestamp: Date.now()
+                                };
+                                // Use a unique key for each hit? Or let Gun handle overwrites.
+                                // Using .set() overwrites previous value at 'hits', good for ephemeral events.
+                                currentLobby.get('hits').set(hitData);
+                            }
+                            scene?.remove(bullet.mesh);
+                            bullets.splice(i, 1);
+                            hit = true;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // SP: Check against enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (enemy.box && bulletSphere.intersectsBox(enemy.box)) {
+                        enemy.health -= 40;
+                        if (enemy.healthBar) { enemy.healthBar.update(enemy.health, enemy.maxHealth); }
+
+                        scene?.remove(bullet.mesh);
+                        bullets.splice(i, 1);
+                        hit = true;
+
+                        if (enemy.health <= 0) {
+                            scene?.remove(enemy.mesh);
+                            enemies.splice(j, 1);
+                            enemiesKilledSP++;
+                            playerScore++;
+                            updateHUD();
+                            if (enemiesKilledSP >= WIN_CONDITION_KILLS_SP) {
+                                showEndGameScreen("You Win!", `Killed ${enemiesKilledSP} enemies.`);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            // No need for 'if (hit) continue;' here as splice/break handles it
+        }
+    }
+
+    function updateEnemyBullets(delta) {
+        if (multiplayerMode) return;
+        // ... (Enemy bullet logic remains the same, check player collision using sphere) ...
+         for (let i = enemyBullets.length - 1; i >= 0; i--) {
+            const bullet = enemyBullets[i];
+            bullet.age += delta;
+
+            if (bullet.age > bullet.lifeTime) {
+                scene?.remove(bullet.mesh);
+                enemyBullets.splice(i, 1);
+                continue;
+            }
+
+            _vector.copy(bullet.direction).multiplyScalar(bullet.speed * delta);
+            bullet.mesh.position.add(_vector);
+
+            const bulletSphere = new THREE.Sphere(bullet.mesh.position, 0.1);
+            let hit = false;
+
+            // Check wall collision
+            for (const wallData of walls) {
+                if (wallData.type === 'wall' && bulletSphere.intersectsBox(wallData.box)) {
+                    scene?.remove(bullet.mesh);
+                    enemyBullets.splice(i, 1);
+                    hit = true; break;
+                }
+            }
+            if (hit) continue;
+
+            // Check player collision (use player box for consistency?)
+            _playerBox.setFromCenterAndSize(playerObject.position.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT / 2, 0)), _spawnCheckSize); // Update player box roughly
+
+            if (bulletSphere.intersectsBox(_playerBox)) { // Check intersection
+                takeDamage(15); // Player takes damage
+                scene?.remove(bullet.mesh);
+                enemyBullets.splice(i, 1);
+                // No need to break, bullet is gone
+            }
+        }
+    }
+
+    // ===============================
+    // --- SINGLE PLAYER ENEMY AI ---
+    // ===============================
+
+     function spawnEnemySP() {
+        if (multiplayerMode || enemiesKilledSP >= WIN_CONDITION_KILLS_SP || enemies.length >= MAX_ENEMIES_SP) return;
+
+        const type = Math.random() < 0.6 ? 'normal' : 'fast';
+        const speed = type === 'normal' ? (2 + Math.random() * 2) : (4 + Math.random() * 2);
+        const maxHealth = type === 'normal' ? 100 : 60;
+        const color = type === 'normal' ? 0xff4444 : 0xffa500;
+        const shootCooldown = type === 'normal' ? 2000 + Math.random() * 1000 : 1500 + Math.random() * 500;
+
+        const enemyGeometry = new THREE.BoxGeometry(1, PLAYER_HEIGHT * 0.9, 1);
+        const enemyMaterial = new THREE.MeshPhongMaterial({ color: color });
+        const enemyMesh = new THREE.Mesh(enemyGeometry, enemyMaterial);
+        enemyMesh.castShadow = true;
+
+        let validPosition = false;
+        let attempts = 0;
+        const spawnArea = 40;
+
+        while (!validPosition && attempts < 30) {
+            attempts++;
+            const x = (Math.random() - 0.5) * spawnArea * 2;
+            const z = (Math.random() - 0.5) * spawnArea * 2;
+            const potentialPos = new THREE.Vector3(x, PLAYER_HEIGHT * 0.45, z); // Center height for check
+
+            if (playerObject && playerObject.position.distanceTo(potentialPos) < 15) continue;
+
+            const tempBox = new THREE.Box3().setFromCenterAndSize(potentialPos, new THREE.Vector3(1, PLAYER_HEIGHT * 0.9, 1));
+            let collision = false;
+            for (const wall of walls) {
+                if (wall.type === 'wall' && tempBox.intersectsBox(wall.box)) {
+                    collision = true; break;
+                }
+            }
+            if (!collision) {
+                 enemyMesh.position.copy(potentialPos);
+                 validPosition = true;
+            }
+        }
+
+        if (!validPosition) {
+             console.warn("Failed to find valid spawn for enemy.");
+             return null;
+        }
+
+        scene.add(enemyMesh);
+
+        const healthBar = createHealthBarBillboard();
+        healthBar.position.set(0, PLAYER_HEIGHT * 0.5 + 0.4, 0);
+        enemyMesh.add(healthBar);
+
+        const newEnemy = {
+            mesh: enemyMesh, health: maxHealth, maxHealth: maxHealth, speed: speed, type: type,
+            box: new THREE.Box3().setFromObject(enemyMesh), // Initial box
+            lastAttackTime: 0, attackCooldown: 1500,
+            lastShotTime: performance.now() + Math.random() * shootCooldown, shootCooldown: shootCooldown,
+            healthBar: healthBar, pathTarget: null, lastRepathTime: 0,
+        };
+        enemies.push(newEnemy);
+        updateHUD();
+        return newEnemy;
+    }
+
+    // updateEnemiesSP, shootFromEnemySP, checkLineOfSight, handleEnemySpawningSP
+    // remain largely the same logic as before. Make sure bounding boxes (`enemy.box`)
+    // are updated if enemies move.
+
+    function updateEnemiesSP(delta) { // Ensure enemy boxes update
+        if (multiplayerMode) return;
+        const now = performance.now();
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            const distToPlayer = enemy.mesh.position.distanceTo(playerObject.position);
+            const dirToPlayer = _vector.subVectors(playerObject.position, enemy.mesh.position).normalize();
+             dirToPlayer.y = 0; // Horizontal direction
+
+             let hasLOS = false;
+             if (distToPlayer < 30) { // LOS check range
+                // Check from enemy eye level to player center approx
+                const enemyEyePos = enemy.mesh.position.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT * 0.7, 0));
+                const playerCenterPos = playerObject.position.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT * 0.5, 0));
+                hasLOS = checkLineOfSight(enemyEyePos, playerCenterPos);
+             }
+
+             let moved = false; // Track if enemy moved this frame
+
+             // --- Behavior ---
+             if (hasLOS && distToPlayer < 25) {
+                 enemy.pathTarget = null;
+                 _lookTarget.copy(playerObject.position);
+                 _lookTarget.y = enemy.mesh.position.y; // Look horizontally
+                 enemy.mesh.lookAt(_lookTarget);
+
+                 // Shooting
+                 if (distToPlayer > 3 && now - enemy.lastShotTime > enemy.shootCooldown) {
+                     shootFromEnemySP(enemy);
+                     enemy.lastShotTime = now;
+                 }
+
+                 // Movement
+                 const idealDistance = 8;
+                 if (distToPlayer > idealDistance) {
+                     const moveDir = dirToPlayer; // Already normalized and horizontal
+                     const intendedMove = moveDir.multiplyScalar(enemy.speed * delta);
+                     const nextPos = enemy.mesh.position.clone().add(intendedMove);
+
+                     // Enemy collision check (simplified - check against walls only)
+                     const enemyCollider = new THREE.Sphere(nextPos.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT*0.45, 0)), 0.6); // Approx sphere
+                     let wallCollision = false;
+                     for (const wall of walls) {
+                         if (wall.type === 'wall' && enemyCollider.intersectsBox(wall.box)) {
+                             wallCollision = true; break;
+                         }
+                     }
+                     if (!wallCollision) {
+                          enemy.mesh.position.copy(nextPos);
+                          moved = true;
+                     }
+                 } else if (distToPlayer < 1.5 && now - enemy.lastAttackTime > enemy.attackCooldown) {
+                     // Melee
+                     takeDamage(10);
+                     enemy.lastAttackTime = now;
+                 }
+
+             } else { // Player not visible or too far
+                 if (!enemy.pathTarget || enemy.mesh.position.distanceTo(enemy.pathTarget) < 1) {
+                     if (now - enemy.lastRepathTime > 5000) { // Find new path target
+                        enemy.pathTarget = new THREE.Vector3(
+                            enemy.mesh.position.x + (Math.random() - 0.5) * 20,
+                            enemy.mesh.position.y, // Stay on same level for simplicity
+                            enemy.mesh.position.z + (Math.random() - 0.5) * 20
+                        );
+                        enemy.lastRepathTime = now;
+                     }
+                 }
+
+                 if (enemy.pathTarget) {
+                     const dirToTarget = _vector.subVectors(enemy.pathTarget, enemy.mesh.position).normalize();
+                     dirToTarget.y = 0;
+                     if (dirToTarget.lengthSq() > 0.001) { // Avoid lookAt(0,0,0) if already at target
+                        enemy.mesh.lookAt(enemy.mesh.position.clone().add(dirToTarget));
+                        const intendedMove = dirToTarget.multiplyScalar(enemy.speed * delta * 0.5); // Slower wander
+                        const nextPos = enemy.mesh.position.clone().add(intendedMove);
+
+                        // Collision check for wandering
+                         const enemyCollider = new THREE.Sphere(nextPos.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT*0.45, 0)), 0.6);
+                         let wallCollision = false;
+                         for (const wall of walls) {
+                             if (wall.type === 'wall' && enemyCollider.intersectsBox(wall.box)) {
+                                 wallCollision = true; enemy.pathTarget = null; break; // Hit wall, find new path next time
+                             }
+                         }
+                         if (!wallCollision) {
+                             enemy.mesh.position.copy(nextPos);
+                             moved = true;
+                         }
+                     } else {
+                         enemy.pathTarget = null; // Reached target
+                     }
+                 }
+            }
+
+            // Update bounding box IF enemy moved
+            if (moved) {
+                 enemy.box.setFromObject(enemy.mesh);
+            }
+            // Update health bar orientation
+            if (enemy.healthBar) {
+                enemy.healthBar.quaternion.copy(camera.quaternion);
+            }
+        }
+    }
+
+    function shootFromEnemySP(enemy) { // Logic mostly the same
+        if (multiplayerMode) return;
+
+        const bulletGeometry = new THREE.SphereGeometry(0.08, 6, 6);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff6600 });
+        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+        const aimTarget = playerObject.position.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT * 0.5, 0));
+        const spread = 0.15;
+        const distFactor = Math.max(1, aimTarget.distanceTo(enemy.mesh.position) / 10); // Spread increases slightly with distance
+        aimTarget.x += (Math.random() - 0.5) * spread * distFactor;
+        aimTarget.y += (Math.random() - 0.5) * spread * distFactor;
+        aimTarget.z += (Math.random() - 0.5) * spread * distFactor;
+
+        const direction = _vector.subVectors(aimTarget, enemy.mesh.position).normalize();
+
+        const startOffset = direction.clone().multiplyScalar(0.6);
+        bullet.position.copy(enemy.mesh.position).add(new THREE.Vector3(0, PLAYER_HEIGHT*0.4, 0)).add(startOffset); // Approx gun height
+
+        scene.add(bullet);
+
+        enemyBullets.push({
+            mesh: bullet, direction: direction, speed: 40, lifeTime: 3, age: 0
+        });
+        enemyShotSound.currentTime = 0;
+        enemyShotSound.play();
+    }
+
+    const _raycaster = new THREE.Raycaster();
+    const _origin = new THREE.Vector3();
+    const _target = new THREE.Vector3();
+    const _direction = new THREE.Vector3();
+    const _lookTarget = new THREE.Vector3();
+
+    function checkLineOfSight(startPos, endPos) { // Logic remains the same
+        _origin.copy(startPos);
+        _target.copy(endPos);
+        _direction.subVectors(_target, _origin).normalize();
+
+        _raycaster.set(_origin, _direction);
+        _raycaster.far = _origin.distanceTo(_target);
+
+        const wallMeshes = walls.filter(w => w.type === 'wall').map(w => w.mesh);
+        const intersections = _raycaster.intersectObjects(wallMeshes, false);
+
+        // Debug LOS check
+        // if (intersections.length > 0) {
+        //     console.log(`LOS blocked between ${startPos.toArray().map(n=>n.toFixed(1))} and ${endPos.toArray().map(n=>n.toFixed(1))} by ${intersections[0].object.name || 'wall'}`);
+        // }
+
+        return intersections.length === 0;
+    }
+
+    function handleEnemySpawningSP(delta) { // Logic remains the same
+        if (multiplayerMode || enemiesKilledSP >= WIN_CONDITION_KILLS_SP) return;
+        enemySpawnTimerSP += delta;
+        if (enemySpawnTimerSP > ENEMY_SPAWN_RATE_SP && enemies.length < MAX_ENEMIES_SP) {
+            spawnEnemySP();
+            enemySpawnTimerSP = 0;
+        }
+    }
+
+     function createHealthBarBillboard() { // Logic remains the same
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 32;
+        const context = canvas.getContext('2d');
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(1.5, 0.3, 1);
+
+        sprite.update = (currentHealth, maxHealth) => {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Background
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            const healthPercentage = Math.max(0, currentHealth) / maxHealth;
+            context.fillStyle = healthPercentage > 0.5 ? '#4CAF50' : healthPercentage > 0.2 ? '#FFC107' : '#F44336'; // Color
+            context.fillRect(2, 2, (canvas.width - 4) * healthPercentage, canvas.height - 4); // Fill
+            context.strokeStyle = 'rgba(200, 200, 200, 0.8)'; // Border
+            context.lineWidth = 2; context.strokeRect(0, 0, canvas.width, canvas.height);
+            texture.needsUpdate = true;
+        };
+        sprite.update(100, 100); // Initial full health
+        return sprite;
+    }
+
+    // ===============================
+    // --- MULTIPLAYER NETWORKING ---
+    // ===============================
+
+    function createLobby() {
+        myPlayerName = document.getElementById('multiplayerNameInput').value.trim();
+        if (!myPlayerName) { alert("Please enter your name."); return; }
+        if (!gun) { console.error("Gun not initialized!"); return; }
+
+        isHost = true;
+        lobbyCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        currentLobby = gun.get('lobbies').get(lobbyCode);
+
+        // Initial lobby state
+        currentLobby.put({
+             gameState: 'lobby',
+             hostId: myPlayerId,
+             createdAt: Date.now()
+        });
+        console.log(`Lobby ${lobbyCode} created by ${myPlayerName} (${myPlayerId})`);
+
+        // Add self to players list FIRST LOCALLY, then network
+        playersList[myPlayerId] = {
+            id: myPlayerId, name: myPlayerName,
+            x: 0, y: PLAYER_HEIGHT, z: 0, ry: 0, crx: 0, // Use default pos
+            health: 100, score: 0, left: false, counted: false
+        };
+        currentLobby.get('players').get(myPlayerId).put(playersList[myPlayerId]);
+
+        // Switch UI immediately
+        document.getElementById('lobbySetup').style.display = 'none';
+        document.getElementById('lobbyInfo').style.display = 'block';
+
+        subscribeLobbyUpdates(); // Start listening AFTER joining
+        refreshLobbyUI(); // Refresh UI immediately with self
+        alert(`Lobby created! Code: ${lobbyCode}\nShare this code with friends.`);
+    }
+
+    function joinLobby() {
+        myPlayerName = document.getElementById('multiplayerNameInput').value.trim();
+        const inputCode = document.getElementById('lobbyCodeInput').value.trim().toUpperCase();
+
+        if (!myPlayerName) { alert("Please enter your name."); return; }
+        if (!inputCode) { alert("Enter a lobby code."); return; }
+        if (!gun) { console.error("Gun not initialized!"); return; }
+
+        isHost = false;
+        lobbyCode = inputCode;
+        currentLobby = gun.get('lobbies').get(lobbyCode);
+
+        currentLobby.get('gameState').once(state => {
+            if (state === undefined || state === null) {
+                alert(`Lobby ${lobbyCode} not found or is inactive.`);
+                currentLobby = null; lobbyCode = null;
+            } else if (state === 'playing') {
+                alert(`Lobby ${lobbyCode} is already in progress.`);
+                currentLobby = null; lobbyCode = null;
+            } else {
+                console.log(`Joining lobby ${lobbyCode} as ${myPlayerName} (${myPlayerId})`);
+
+                // Add self to players list FIRST LOCALLY, then network
+                playersList[myPlayerId] = {
+                    id: myPlayerId, name: myPlayerName,
+                    x: 0, y: PLAYER_HEIGHT, z: 0, ry: 0, crx: 0,
+                    health: 100, score: 0, left: false, counted: false
+                };
+                currentLobby.get('players').get(myPlayerId).put(playersList[myPlayerId]);
+
+                document.getElementById('lobbySetup').style.display = 'none';
+                document.getElementById('lobbyInfo').style.display = 'block';
+
+                subscribeLobbyUpdates(); // Start listening AFTER joining
+                refreshLobbyUI(); // Refresh UI immediately with self
+                alert(`Joined Lobby: ${lobbyCode}`);
+            }
+        }, { wait: 500 }); // Add timeout in case lobby doesn't exist
+    }
+
+
+     function leaveLobby() {
+        if (currentLobby && myPlayerId) {
+            console.log(`Player ${myPlayerId} leaving lobby ${lobbyCode}`);
+            // Mark player as left on the network - send minimal final update
+            currentLobby.get('players').get(myPlayerId).put({ left: true, id: myPlayerId, name: myPlayerName });
+
+            // Clean up Gun listeners for this lobby specifically
+            currentLobby.get('players').map().off();
+            currentLobby.get('hits').off();
+            currentLobby.get('chat').map().off();
+            currentLobby.get('gameState').off();
+            console.log("Unsubscribed from lobby updates.");
+        }
+
+        // Remove all remote player models if scene exists
+        if(scene) {
+             for(const key in remotePlayers) {
+                 if (remotePlayers[key]) {
+                     scene.remove(remotePlayers[key]);
+                 }
+             }
+        }
+        remotePlayers = {};
+        playersList = {}; // Clear local player cache
+
+        // Reset MP variables
+        currentLobby = null;
+        lobbyCode = null;
+        isHost = false;
+        multiplayerMode = false;
+
+        // Reset UI to initial multiplayer screen state
+        document.getElementById('lobbyInfo').style.display = 'none';
+        document.getElementById('lobbySetup').style.display = 'block';
+        document.getElementById('lobbyMessage').innerText = "";
+        document.getElementById('lobbyChatMessages').innerHTML = "";
+        document.getElementById('startGameBtn').style.display = 'none';
+
+        console.log("Left lobby and cleaned up.");
+        // Note: Does not automatically go back to main menu, stays in MP menu
+    }
+
+
+    function subscribeLobbyUpdates() {
+        if (!currentLobby) return;
+
+        console.log("Subscribing to lobby updates for:", lobbyCode);
+
+        // --- Player Updates ---
+        currentLobby.get('players').map().on((playerData, key) => {
+            // console.log(`Received player update [${key}]:`, playerData); // DEBUG: Log all updates
+
+            if (!playerData) { // Player data removed (or initial null)
+                if (playersList[key]) {
+                     console.log("Player data null/removed for:", key, playersList[key]?.name);
+                     playersList[key].left = true; // Mark as left locally
+                     if (remotePlayers[key] && scene) { // Remove mesh if it exists
+                        scene.remove(remotePlayers[key]);
+                        delete remotePlayers[key];
+                     }
+                }
+                // Still need to refresh UI after marking as left
+                 refreshLobbyUI();
+                 updateScorecard();
+                return; // Stop processing null data
+            }
+
+            // --- Process Valid Player Data ---
+            const isSelf = (key === myPlayerId);
+            const wasKnown = !!playersList[key];
+            const wasLeft = wasKnown && playersList[key].left;
+
+            // Store/Update local cache (Merge new data onto existing or create new)
+            // Important: Ensure 'id' and 'name' don't get overwritten by partial updates
+            playersList[key] = {
+                ...(playersList[key] || {}), // Keep existing data if any
+                ...playerData, // Overwrite with new data
+                id: key, // Ensure ID is always correct
+                name: playerData.name || playersList[key]?.name || "Player" // Preserve name if not in update
+            };
+
+            // Handle leaving players explicitly marked
+            if (playerData.left) {
+                 console.log("Player marked as left:", key, playerData.name);
+                 playersList[key].left = true; // Ensure local flag is set
+                 if (remotePlayers[key] && scene) {
+                     scene.remove(remotePlayers[key]);
+                     delete remotePlayers[key];
+                 }
+                 // Update UI and return
+                 refreshLobbyUI();
+                 updateScorecard();
+                 return;
+            } else {
+                 // If player was previously marked left but now sends data without left:true, mark as rejoined
+                 if (wasLeft) {
+                     console.log("Player re-joined:", key, playersList[key].name);
+                     playersList[key].left = false;
+                 }
+            }
+
+            // --- Update 3D Representation (for remote players) ---
+            if (!isSelf && !playersList[key].left) { // Check left status again after merge
+                let remotePlayerMesh = remotePlayers[key];
+
+                // Create mesh if it doesn't exist AND player hasn't left
+                if (!remotePlayerMesh) {
+                    console.log("Creating remote player mesh for:", key, playersList[key].name);
+                    remotePlayerMesh = createRemotePlayerModel(playersList[key].name);
+                    remotePlayers[key] = remotePlayerMesh;
+                    // Add to scene ONLY if the game is actually running (multiplayerMode flag is set)
+                    if (multiplayerMode && scene) {
+                         scene.add(remotePlayerMesh);
+                         console.log("Added mesh to scene for:", key);
+                    } else {
+                         console.log("Game not running, delaying mesh add for", key);
+                    }
+                }
+
+                // Update Position (use interpolation later if needed)
+                if (playerData.x !== undefined && playerData.y !== undefined && playerData.z !== undefined) {
+                    // Adjust y based on model origin being at feet
+                    remotePlayerMesh.position.set(playerData.x, playerData.y - PLAYER_HEIGHT, playerData.z); // Y should be player base position
+                }
+                // Update Rotation
+                 if (playerData.ry !== undefined) { remotePlayerMesh.rotation.y = playerData.ry; }
+                 // if (playerData.crx !== undefined && remotePlayerMesh.head) { remotePlayerMesh.head.rotation.x = playerData.crx; }
+
+                // Update Health Bar
+                if (playerData.health !== undefined && remotePlayerMesh.healthBar) {
+                    remotePlayerMesh.healthBar.update(playerData.health, 100);
+                }
+                // Update Name Tag (if name changes)
+                if (playerData.name && remotePlayerMesh.label && remotePlayerMesh.label.material.map.userData.text !== playerData.name) {
+                     scene?.remove(remotePlayerMesh.label); // Use optional chaining
+                     remotePlayerMesh.label = createTextSprite(playerData.name);
+                     remotePlayerMesh.label.position.set(0, PLAYER_HEIGHT + 0.4, 0);
+                     remotePlayerMesh.add(remotePlayerMesh.label);
+                     remotePlayerMesh.label.material.map.userData = {text: playerData.name};
+                }
+                // Update bounding box for hit detection
+                 if(remotePlayerMesh.bodyMesh) {
+                      // Important: Update box based on the MESH's world position/rotation, not the group's
+                      remotePlayerMesh.bodyMesh.getWorldPosition(_vector); // Get world pos of the body
+                      remotePlayerMesh.box.setFromCenterAndSize(_vector, _spawnCheckSize); // Recenter box at world pos
+                 } else {
+                     // Fallback: use group position if no bodyMesh ref
+                     remotePlayerMesh.box.setFromCenterAndSize(remotePlayerMesh.position.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT/2, 0)), _spawnCheckSize);
+                 }
+
+            } // End if !isSelf
+
+            // --- Score Update Logic (Triggered by 'lastShooter' being set on dead player) ---
+             if (playerData.health <= 0 && !playersList[key].counted && playerData.lastShooter) {
+                 console.log(`Death detected for ${key} (${playersList[key].name}), killed by ${playerData.lastShooter}`);
+                 playersList[key].counted = true; // Mark death processed LOCALLY
+
+                 // Award score to the shooter
+                 const shooterId = playerData.lastShooter;
+                 if (playersList[shooterId] && !playersList[shooterId].left) { // Check if shooter exists and hasn't left
+                      // Increment score locally for immediate feedback
+                      playersList[shooterId].score = (playersList[shooterId].score || 0) + 1;
+                      console.log(`Score awarded to ${shooterId}. New score: ${playersList[shooterId].score}`);
+
+                      // If the shooter is the local player, update HUD and network score
+                      if (shooterId === myPlayerId) {
+                          playerScore = playersList[shooterId].score; // Sync local variable
+                          updateHUD();
+                          // Send reliable score update to network
+                          currentLobby.get('players').get(myPlayerId).put({ score: playerScore });
+                          // Check for local win condition
+                          if (playerScore >= WIN_CONDITION_SCORE_MP && !paused) { // Check paused to prevent duplicate screens
+                              showEndGameScreen("You Win!", `Reached ${WIN_CONDITION_SCORE_MP} points!`);
+                              // Maybe tell others game ended?
+                              // currentLobby.get('gameState').put('finished');
+                          }
+                      }
+                 } else {
+                      console.log(`Shooter ${shooterId} not found or left, score not awarded.`);
+                 }
+                 // Note: lastShooter and counted flags are reset on respawn (in respawnPlayerMultiplayer and its network update)
+             }
+
+            // --- Refresh UI ---
+            // Crucially, call these AFTER processing all data for this update cycle
+            refreshLobbyUI(); // Update lobby player list / start button
+            updateScorecard(); // Update in-game scoreboard
+
+        }); // End of player updates .on()
+
+        // --- Hit Updates ---
+         currentLobby.get('hits').on((hitData, key) => {
+             if (!hitData || !hitData.target || !hitData.shooter || hitData.timestamp < (Date.now() - 5000)) {
+                 // Ignore invalid, old, or null data
+                 // currentLobby.get('hits').get(key).put(null); // Clean up old hits? Be careful with timing.
+                 return;
+             }
+
+             // Process hits meant for the local player
+             if (hitData.target === myPlayerId && playerHealth > 0) { // Check health > 0 to avoid processing hits while respawning
+                 console.log(`Received hit from ${hitData.shooter}, damage: ${hitData.damage}`);
+                 takeDamage(hitData.damage, hitData.shooter); // Apply damage locally, records killer if lethal
+
+                 // Remove the hit event after processing (optional, reduces noise)
+                 // Use timeout to avoid potential gun race condition?
+                 // setTimeout(() => currentLobby.get('hits').get(key).put(null), 100);
+             }
+         });
+
+
+        // --- Chat Updates ---
+        currentLobby.get('chat').map().on((chatMsg, key) => { // Added key
+            if (chatMsg && chatMsg.message && chatMsg.sender) {
+                appendLobbyChat(chatMsg.sender, chatMsg.message, chatMsg.timestamp);
+                // Clean up old chat message?
+                // setTimeout(() => currentLobby.get('chat').get(key).put(null), 60000); // e.g., after 1 minute
+            }
+        });
+
+        // --- Game State Updates ---
+        currentLobby.get('gameState').on((state) => {
+            console.log("Lobby gameState changed to:", state);
+            // Check if the game is *not* already running locally before starting
+            if (state === 'playing' && !multiplayerMode) {
+                 finalizeMultiplayerStart();
+            } else if (state === 'lobby') {
+                 // Maybe handle returning to lobby after a game?
+            } else if (state === 'finished') {
+                 if (!paused) {
+                      showEndGameScreen("Game Finished", "Check scores!");
+                 }
+            }
+        });
+    }
+
+    function refreshLobbyUI() {
+        // This function ONLY updates the UI based on the current state (lobbyCode, playersList, isHost)
+        if (!lobbyCode || !playersList || !document.getElementById('lobbyInfo').style.display || document.getElementById('lobbyInfo').style.display === 'none') {
+             // Don't update if lobby info isn't visible or essential data is missing
+             // console.log("Skipping lobby UI refresh - not visible or no data."); // DEBUG
+             return;
+        }
+        // console.log("Refreshing Lobby UI. Host:", isHost, "Players:", Object.keys(playersList).length); // DEBUG
+
+        let playersInfo = "Players:\n";
+        let playerCount = 0;
+        for (let key in playersList) {
+             const player = playersList[key];
+             if (player && !player.left) { // Check player exists and hasn't left
+                 playersInfo += `- ${player.name || "Joining..."}`;
+                 if (player.id === myPlayerId) playersInfo += " (You)";
+                 if (player.id === currentLobby?.get('hostId')?._) playersInfo += " (Host)"; // Check host ID if needed
+                 playersInfo += "\n";
+                 playerCount++;
+             }
+        }
+        if (playerCount === 0) {
+             playersInfo += "(Waiting for players...)\n";
+        }
+
+        // Update Lobby Message Text
+        const lobbyMsgElement = document.getElementById('lobbyMessage');
+        if (lobbyMsgElement) {
+             lobbyMsgElement.innerText = `Lobby Code: ${lobbyCode}\n${playersInfo}`;
+        } else {
+             console.warn("lobbyMessage element not found!");
+        }
+
+
+        // Show/Hide Start Game Button
+        const startButton = document.getElementById('startGameBtn');
+        if (startButton) {
+            // Show button ONLY if host AND at least 1 player (the host themselves) is present
+            if (isHost && playerCount >= 1) {
+                startButton.style.display = 'block';
+                // console.log("Showing Start Game button."); // DEBUG
+            } else {
+                startButton.style.display = 'none';
+                // console.log("Hiding Start Game button."); // DEBUG
+            }
+        } else {
+             console.warn("startGameBtn element not found!");
+        }
+    }
+
+
+     function appendLobbyChat(sender, message, timestamp) {
+        const chatBox = document.getElementById('lobbyChatMessages');
+        if (!chatBox) return;
+        const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const messageDiv = document.createElement('div');
+        // Basic sanitization (replace < and >) to prevent HTML injection
+        const sanitizedMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        messageDiv.innerHTML = `${timeStr ? `[${timeStr}] ` : ''}<strong>${sender}:</strong> ${sanitizedMessage}`;
+        chatBox.appendChild(messageDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function sendLobbyChat() {
+        const msgInput = document.getElementById('lobbyChatInput');
+        const message = msgInput.value.trim();
+        if (message && currentLobby && myPlayerName) {
+             // Use .set() with a unique key (timestamp or random) for better reliability?
+             // Or just let it overwrite.
+             currentLobby.get('chat').set({
+                 sender: myPlayerName,
+                 message: message,
+                 timestamp: Date.now()
+             });
+             msgInput.value = "";
+        }
+    }
+
+    function startMultiplayerGame() {
+        if (isHost && currentLobby) {
+             console.log("Host starting the game...");
+             currentLobby.get('gameState').put('playing');
+             // Listener will trigger finalizeMultiplayerStart() for everyone
+        }
+    }
+
+     function getValidSpawnPoint() {
+        console.log("Finding valid spawn point...");
+        let attempts = 0;
+        const maxAttempts = 50;
+        const spawnArea = 45;
+        let bestPos = new THREE.Vector3(0, PLAYER_HEIGHT, 0); // Fallback
+        let foundValid = false;
+
+        while (attempts < maxAttempts && !foundValid) {
+             attempts++;
+             let x = (Math.random() - 0.5) * spawnArea * 2;
+             let z = (Math.random() - 0.5) * spawnArea * 2;
+             // Check potential position using the PLAYER_HEIGHT as the base (feet level)
+             let potentialPos = new THREE.Vector3(x, PLAYER_HEIGHT, z);
+
+             // 1. Check collision with walls using the standard checkCollision
+             if (checkCollision(potentialPos)) {
+                 // console.log(`Attempt ${attempts}: Spawn collision at ${potentialPos.toArray().map(n=>n.toFixed(1))}`); // DEBUG
+                 continue; // Invalid position due to wall collision
+             }
+
+             // 2. Check distance from other players (if in MP and list has others)
+             let tooClose = false;
+             if (multiplayerMode && Object.keys(playersList).length > 1) {
+                 for (let key in playersList) {
+                     // Skip self, players who have left, or players without position data yet
+                     if (key === myPlayerId || playersList[key].left || playersList[key].x === undefined) continue;
+                     const other = playersList[key];
+                     _vector.set(other.x, other.y || PLAYER_HEIGHT, other.z); // Use known Y or default
+                     if (potentialPos.distanceTo(_vector) < 5) { // Minimum distance
+                         tooClose = true;
+                         // console.log(`Attempt ${attempts}: Too close to player ${key}`); // DEBUG
+                         break;
+                     }
+                 }
+             }
+
+             if (!tooClose) {
+                 console.log(`Found valid spawn point after ${attempts} attempts:`, potentialPos);
+                 bestPos = potentialPos; // Store the valid position
+                 foundValid = true; // Exit loop
+             } else if (attempts === 1 && !foundValid) {
+                 // Store the first non-wall-colliding spot as an initial fallback
+                 bestPos = potentialPos.clone();
+             }
+        }
+
+        if (!foundValid) {
+             console.warn(`Could not find ideal spawn point after ${maxAttempts} attempts, using fallback:`, bestPos);
+             // Final check on fallback position just in case
+             if (checkCollision(bestPos)) {
+                 console.error("Fallback spawn point is also colliding! Defaulting to 0, H, 0");
+                 return new THREE.Vector3(0, PLAYER_HEIGHT, 0);
+             }
+        }
+        return bestPos;
+    }
+
+
+    // ===============================
+    // --- REMOTE PLAYER MODELS ---
+    // ===============================
+
+    function createRemotePlayerModel(name) {
+        const group = new THREE.Group();
+        // Body (origin at the bottom center)
+        const bodyGeo = new THREE.BoxGeometry(PLAYER_RADIUS * 2, PLAYER_HEIGHT, PLAYER_RADIUS * 2);
+        const bodyMat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+        bodyMesh.castShadow = true;
+        bodyMesh.position.y = PLAYER_HEIGHT / 2; // Center mesh vertically relative to group origin
+        group.add(bodyMesh);
+        group.bodyMesh = bodyMesh; // Reference for bounding box
+
+        const label = createTextSprite(name);
+        label.position.set(0, PLAYER_HEIGHT + 0.4, 0); // Above head
+        group.add(label);
+        group.label = label;
+
+        const healthBar = createHealthBarBillboard();
+        healthBar.position.set(0, PLAYER_HEIGHT + 0.7, 0); // Above name
+        group.add(healthBar);
+        group.healthBar = healthBar;
+
+         // Bounding Box for hit detection (origin matches group's origin at feet)
+         // The box center will be halfway up the player height.
+         group.box = new THREE.Box3();
+         group.box.setFromCenterAndSize(new THREE.Vector3(0, PLAYER_HEIGHT / 2, 0), _spawnCheckSize);
+         // We need to manually update the box's min/max based on the group's world position in the update loop.
+
+        return group;
+    }
+
+    function createTextSprite(message) { // Logic remains the same
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const font = "Bold 24px Arial";
+        context.font = font;
+        const metrics = context.measureText(message);
+        canvas.width = THREE.MathUtils.ceilPowerOfTwo(metrics.width + 20);
+        canvas.height = 64;
+        context.font = font; context.fillStyle = "rgba(255, 255, 255, 0.9)";
+        context.textAlign = "center"; context.textBaseline = "middle";
+        context.fillText(message, canvas.width / 2, canvas.height / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        texture.userData = { text: message };
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(0.01 * canvas.width, 0.01 * canvas.height, 1);
+        return sprite;
+    }
+
+
+    // ===============================
+    // --- MAIN ANIMATION LOOP ---
+    // ===============================
+
+    let animationFrameId = null; // To potentially stop the loop
+
+    function animate() {
+        animationFrameId = requestAnimationFrame(animate); // Store the id
+
+        const currentTime = performance.now();
+        const delta = Math.min(0.05, (currentTime - lastTime) / 1000); // Clamp delta time (max 50ms)
+        lastTime = currentTime;
+
+        if (!scene || !camera) return; // Don't run if scene not setup
+
+        if (paused) {
+             renderer.render(scene, camera); // Still render when paused
+             return;
+        }
+
+        // --- Updates ---
+        updatePlayerMovement(delta);
+        updateBullets(delta);
+
+        if (!multiplayerMode) {
+            // Single Player updates
+             updateEnemiesSP(delta);
+             updateEnemyBullets(delta);
+             handleEnemySpawningSP(delta);
+        } else {
+             // Multiplayer updates
+            for (const key in remotePlayers) {
+                 const remotePlayer = remotePlayers[key];
+                 if (remotePlayer && remotePlayer.healthBar) { // Check if player mesh exists
+                      // Billboarding for labels/healthbars
+                      remotePlayer.healthBar.quaternion.copy(camera.quaternion);
+                      if (remotePlayer.label) {
+                          remotePlayer.label.quaternion.copy(camera.quaternion);
+                      }
+                      // Update bounding box position based on group's world position
+                      if(remotePlayer.box) {
+                          _vector.copy(remotePlayer.position); // Get group's world position (feet)
+                          _vector.y += PLAYER_HEIGHT / 2; // Adjust to player center Y
+                          remotePlayer.box.setFromCenterAndSize(_vector, _spawnCheckSize);
+                      }
+                 }
+             }
+
+             // Network Updates (Throttled)
+             if (currentLobby && currentTime - lastNetworkUpdateTime > NETWORK_UPDATE_INTERVAL) {
+                 lastNetworkUpdateTime = currentTime;
+                 // Send only essential, frequently changing data
+                 const playerData = {
+                     x: playerObject.position.x,
+                     y: playerObject.position.y,
+                     z: playerObject.position.z,
+                     ry: playerObject.rotation.y,
+                     crx: camera.rotation.x,
+                 };
+                 currentLobby.get('players').get(myPlayerId).put(playerData);
+             }
+        }
+
+        // Auto shooting
+        if (gunMode === "auto" && isShooting) {
+            fireBullet();
+        }
+
+        // Reload animation
+        if (reloading && reloadStartTime > 0) {
+            const reloadProgress = (currentTime - reloadStartTime) / (RELOAD_DURATION * 1000);
+            if (playerGun) {
+                 playerGun.rotation.x = -Math.PI / 10 * Math.sin(Math.min(reloadProgress, 1) * Math.PI);
+            }
+        } else if (playerGun && playerGun.rotation.x !== 0) {
+            playerGun.rotation.x = 0; // Reset tilt
+        }
+
+        // Ammo prompt visibility
+        const ammoPromptEl = document.getElementById('ammoPrompt');
+        if (ammoBox && ammoPromptEl) { // Check element exists
+            const distToAmmo = playerObject.position.distanceTo(ammoBox.position);
+            ammoPromptEl.style.display = distToAmmo < AMMO_PICKUP_DISTANCE && totalAmmo < MAX_TOTAL_AMMO ? 'block' : 'none'; // Only show if needed
+        } else if (ammoPromptEl) {
+             ammoPromptEl.style.display = 'none';
+        }
+
+        // --- Rendering ---
+        renderer.render(scene, camera);
+    }
+
+    // --- Initial call ---
+    // No automatic game start, wait for button clicks.
+
+  </script>
+</body>
+</html>
